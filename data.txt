@@ -1,0 +1,6 @@
+Frequency: 0.63
+Attendance: 43439896
+Commitees: 100
+Mandates: 3000
+
+

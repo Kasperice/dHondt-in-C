@@ -6,47 +6,77 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <time.h>
+#include <math.h>
+#define MAXLINE 100
 
-char parties[6][13] = {"PiS", "KO", "Lewica", "PSL", "Konfederacja", "Niewazne"};
 
+float * read_data_from_file(const char *filename) {
+    FILE *fp;
+    char *lp, line[MAXLINE];
+    float n;
+    static float data[4];
+    int i = 0;
 
-void generate_random_votes(int array_to_fill[], float sounding_results[], int comittees/*, int sum_of_votes*/ ) {
-    //now not random
-    float percentages[6];
-    float random_sounding;
-    float random;
-    float sum;
-    srand(time(0));
-    for (int i = 0; i < comittees; i++) {
-        //printf("Sounding result: %f\n", sounding_results[i]);
-        random = (float)((rand() % 400) - 200)/10000; //do poprawy (+/- 2%)
-        //float random = ((float)rand()/(float)(2))/100;// * sounding_results[i]+0.02;
-        //printf("Random: %f\n", random);
+    if ((fp = fopen(filename, "r")) == NULL) {
+        fprintf(stderr, "Error: Couldn't open \"%s\"!\n", filename);
+    }
+
+    while (fgets(line, MAXLINE, fp) != NULL) {
+        for (lp = line; *lp != '\n' && (lp - line) < MAXLINE; lp++) {
+            if (*lp == ':' && sscanf(lp + 1, "%f", &n) == 1) {
+                data[i] = n;
+                i++;
+                break;
+            }
+        }
+    }
+
+    fclose(fp);
+    return data;
+}
+
+float * generate_sounding_results(int commitees) {
+    float *sounding_results = malloc(commitees * sizeof(float));
+    float *sounding_array = malloc(commitees * sizeof(float));
+    float sum = 0;
+    float random = 0;
+    int i = 0;
+    for (i = 0; i < commitees; i++) {
+        random = (float)rand() / (RAND_MAX);
+        if (i == commitees - 1) {
+            random = (float)rand() / (RAND_MAX) * 0.03 + 0.02; // rand() / (RAND_MAX) * (max-min) + (min);
+        }
+        sounding_results[i] = random;
+        sum += sounding_results[i];
+    }
+    for (i = 0; i < commitees; i++) {
+        sounding_array[i] = sounding_results[i]/sum;
+    }
+    return sounding_array;
+}
+
+int * generate_random_votes(float sounding_results[], int commitees, int entitled_to_vote, float attendance) {
+    float *percentages = malloc(commitees * sizeof(float));
+    int *array_to_fill = malloc(commitees * sizeof(int));
+    float random_sounding, random, sum = 0;
+    int i;
+
+    for (i = 0; i < commitees; i++) {
+        random = (float)((rand() % 400) - 200)/4000; // (+/- 10%)
         random_sounding = sounding_results[i] + random;
-        //printf("Sounding result: %f\n", random_sounding);
-        //((sounding_results[i]+2) + 1 - (sounding_results[i]-2)) - sounding_results[i]-2;
-        //tmp = sounding_results[i] * (30253556*0.6174);
-        //tmp = (random_sounding * (30253556*0.6174));
-        //printf("Votes: %d\n\n", tmp);
-        percentages[i] = random_sounding;
-        //array_to_fill[i] = rand() % 5000;
-        sum += random_sounding;
-        //array_to_fill[i] = tmp;
+        percentages[i] = fabs(random_sounding);
+        sum += percentages[i];
     }
-    //printf("Sum: %f\n", sum);
-    //float sum1;
-    for (int i = 0; i < comittees; i++) {
+
+    for (i = 0; i < commitees; i++) {
         percentages[i] = percentages[i]/sum;
-        //sum1 += percentages[i];
-        //printf("Sum: %f\n", sum);
-        array_to_fill[i] = (int)(percentages[i] * (30253556*0.6174));
-        //printf("Votes %s: %d\n\n", parties[i], array_to_fill[i]);
+        array_to_fill[i] = (int)(percentages[i] * (entitled_to_vote*attendance));
     }
-    //printf("Sum: %f\n", sum1);
+
+    return array_to_fill;
 }
 
 void max_value_and_index(int votes_array[], size_t size, int *max_votes_index) {
-    //size_t i;
     int max_value = votes_array[0];
     int max_index = 0;
 
@@ -56,48 +86,65 @@ void max_value_and_index(int votes_array[], size_t size, int *max_votes_index) {
             max_index = i;
         }
     }
+
     *max_votes_index = max_index;
 }
 
 int main(int argc, char **argv)
 {
-	//int votes = 10;				//glosow
-	int mandates_to_give = 460;   //mandatow do rozdania
-	int comittees = 6;			//komitetow wyborczych
-	//int constituencies = 41;	//okregow wyborczych
-	int entitled_to_vote = 30253556;	//uprawnionych do głosowania
-	float attendance = 0.6174;
+    int index, i, j, commitees, mandates_to_give, entitled_to_vote;
+    time_t rawtime;
+    char buffer [255];
+    float *data_read, *sounding_results;
+    int *main_results;
+    float real_attendance, attendance;
+    time (&rawtime);
+    sprintf(buffer,"dHondt_%s",ctime(&rawtime) );
 
-    float sounding_results[6] = {0.44, 0.25, 0.14, 0.08, 0.07, 0.02};
-    //int mandates_on_constituencies = {12,8,14,12,13,15,12,12,10,9,12,8,14,10,9,19,9,12,20,12,12,11,15,14,12,14,9,7,9,9,12,9,16,8,10,12,9,9,10,8,12};
+    srand(time(0));
+    data_read = read_data_from_file("data.txt");
+    entitled_to_vote = (int)data_read[1];
+    real_attendance = data_read[0];
+    commitees = (int)data_read[2];
+    mandates_to_give = (int)data_read[3];
 
-    //int main_results[5] = {1228, 1012, 850, 543, 352, 0};
-    int main_results[6];
-    generate_random_votes(main_results, sounding_results, comittees);
-    int mandates[5] = {0};
-    int dHondt_results[5] = {0};
-    int index;
+    int dHondt_results[commitees];
+    int mandates[commitees];
 
-    for (int i = 0; i < comittees; i++) {
-        printf("Votes %s: %d\n", parties[i], main_results[i]);
+    for (i = 0; i < commitees; i ++) {
+        mandates[i] = 0;
+        dHondt_results[i] = 0;
     }
 
-    for (int i = 0; i < mandates_to_give; i++) {
-        for (int j=0; j<comittees; j++){
-            dHondt_results[j]=main_results[j]/(mandates[j]+1);
+    attendance = real_attendance + (float)((rand() % 400) - 200)/2000; // (+/- 20%)
+    sounding_results = generate_sounding_results(commitees);
+    main_results = generate_random_votes(sounding_results, commitees, entitled_to_vote, attendance);
+
+    FILE *f = fopen(buffer, "w");
+
+    printf("Entitled to vote: %d\tAttendance: %0.2f\n", entitled_to_vote, attendance);
+    fprintf(f, "Entitled to vote: %d\tAttendance: %0.2f\n", entitled_to_vote, attendance);
+
+    for (i = 0; i < mandates_to_give; i++) {
+        for (j = 0; j < commitees; j++){
+            dHondt_results[j] = main_results[j] / (mandates[j] + 1);
         }
-        max_value_and_index(dHondt_results, sizeof(dHondt_results)/sizeof(int), &index);
+        max_value_and_index(dHondt_results, sizeof(dHondt_results) / sizeof(int) - 1, &index);
         mandates[index] += 1;
-        //printf("Size: %d", sizeof(dHondt_results)/sizeof(int));
-        //printf("Max Index (%d) = %d \n", i, index);
     }
-
 
     printf("\n\nElection results:\n");
-    for (int i=0; i<comittees-1; i++) {
-        printf("%s: %d Mandates \n", parties[i], mandates[i]);
+    fprintf(f, "\n\nElection results:\n");
+
+    for (i = 0; i < commitees; i++) {
+        if (i == commitees - 1) {
+            printf("\nInvalid votes:\t%d\t(%0.2f%%)", main_results[i], (main_results[commitees - 1]/(entitled_to_vote*attendance)*100));
+            fprintf(f, "\nInvalid votes:\t%d\t(%0.2f%%)", main_results[i], (main_results[commitees - 1]/(entitled_to_vote*attendance)*100));
+        } else {
+            printf("Party %d:\t%d Mandates\t(%d Votes) \n", i+1, mandates[i], main_results[i]);
+            fprintf(f, "Party %d:\t%d Mandates\t(%d Votes) \n", i+1, mandates[i], main_results[i]);
+        }
     }
-    printf("\nInvalid votes : %d, %0.2f%%", main_results[comittees-1], (main_results[comittees-1]/(30253556*0.6174)*100) );
 
 	return 0;
 }
